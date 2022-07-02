@@ -22,6 +22,6 @@ func NewTx(from Account, to Account, value uint, data string) Tx {
 	}
 }
 
-func IsReward(tx Tx) bool {
+func (tx Tx) IsReward() bool {
 	return tx.Data == "Reward"
 }
