@@ -1,8 +1,11 @@
 package database
 
 import (
+	"bufio"
+	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 type State struct {
@@ -10,6 +13,48 @@ type State struct {
 	TxMempool       []Tx             `json:"txMempool"`
 	DbFile          *os.File         `json:"dbfile"`
 	LatestBlockHash Hash             `json:"latestblockhash"`
+}
+
+func (s *State) NewStateFromDisk() (*State, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Print(err)
+	}
+	gen, err := NewGenesis(filepath.Join(cwd, "database", "genesis.json"))
+	if err != nil {
+		log.Print(err)
+	}
+	balances := make(map[Account]uint, 0)
+	for acc, bal := range gen.Balances {
+		balances[acc] = bal
+	}
+	f, err := os.OpenFile(filepath.Join(cwd, "database", "block.db"), os.O_APPEND|os.O_RDWR, 0600)
+	if err != nil {
+		log.Print(err)
+	}
+	scanner := bufio.NewScanner(f)
+	state := &State{Balances: balances, TxMempool: make([]Tx, 0), DbFile: f, LatestBlockHash: Hash{}}
+	for scanner.Scan() {
+		if scanner.Err() != nil {
+			log.Print(err)
+		}
+		blockFsJson := scanner.Bytes()
+		var blockfs BlockFS
+		err := json.Unmarshal(blockFsJson, &blockfs)
+		if err != nil {
+			log.Print(err)
+		}
+		err = state.ApplyBlock(blockfs.Value)
+		if err != nil {
+			log.Print(err)
+		}
+		state.LatestBlockHash = blockfs.Key
+	}
+	return state, nil
+}
+
+func (s *State) Persist() {
+
 }
 
 func (s *State) ApplyBlock(b Block) error {
